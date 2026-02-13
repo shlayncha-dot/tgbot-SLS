@@ -17,6 +17,34 @@
 - `GOOGLE_PRIVATE_KEY` — приватный ключ сервисного аккаунта (PEM).
 - `GOOGLE_SHEET_ID` — id таблицы (по умолчанию уже установлен `1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ`).
 - `GOOGLE_SHEET_RANGE` — диапазон для записи (по умолчанию `'Set'!A:F`).
+- `GOOGLE_APPS_SCRIPT_URL` — (опционально) URL Web App из Google Apps Script для прямой записи без service account.
+
+
+## Альтернатива service account: запись через Google Apps Script
+Если не хотите настраивать `GOOGLE_SERVICE_ACCOUNT_EMAIL` и `GOOGLE_PRIVATE_KEY`, можно писать в таблицу через Web App:
+
+1. В Google Sheets откройте **Extensions → Apps Script**.
+2. Вставьте скрипт:
+
+```javascript
+function doPost(e) {
+  const payload = JSON.parse(e.postData.contents || '{}');
+  const values = payload.values || [];
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Set');
+  sheet.appendRow(values);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+```
+
+3. Нажмите **Deploy → New deployment → Web app**.
+4. `Execute as`: **Me**, `Who has access`: **Anyone** (или ограничьте по необходимости).
+5. Скопируйте URL и сохраните как секрет/переменную `GOOGLE_APPS_SCRIPT_URL` в Cloudflare Worker.
+
+Когда `GOOGLE_APPS_SCRIPT_URL` задан, бот сначала пишет через Apps Script и не требует service account переменных.
 
 ## Почему `TELEGRAM_TOKEN` «слетает» в Cloudflare (Variables and Secrets)
 Чаще всего это не удаление секрета, а одна из типовых причин:
