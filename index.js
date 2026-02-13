@@ -134,6 +134,10 @@ export default {
     }
 
     const token = env.TELEGRAM_TOKEN;
+
+    if (!token) {
+      return new Response("TELEGRAM_TOKEN is not configured", { status: 500 });
+    }
     const update = await request.json();
 
     const message = update.message;
