@@ -249,14 +249,6 @@ export default {
         return new Response("OK");
       }
 
-      await callTelegram(token, "sendMessage", {
-        chat_id: chatId,
-        text: `Имя получено: ${text}. Верификация завершена ✅`,
-        reply_markup: {
-          remove_keyboard: true
-        }
-      });
-
       const phone = parsePhoneFromReplyText(message.reply_to_message?.text || "");
       const row = [
         new Date().toISOString(),
@@ -269,12 +261,22 @@ export default {
 
       try {
         await appendVerificationToSheet(env, row);
+        await callTelegram(token, "sendMessage", {
+          chat_id: chatId,
+          text: `Имя получено: ${text}. Верификация завершена ✅`,
+          reply_markup: {
+            remove_keyboard: true
+          }
+        });
       } catch (error) {
         const diagnostic = formatGoogleSheetsError(error);
         console.error("Google Sheets append failed", error);
         await callTelegram(token, "sendMessage", {
           chat_id: chatId,
-          text: `⚠️ ${diagnostic}`
+          text: `Имя получено: ${text}, но сохранить данные не удалось. ⚠️ ${diagnostic}`,
+          reply_markup: {
+            remove_keyboard: true
+          }
         });
       }
 
