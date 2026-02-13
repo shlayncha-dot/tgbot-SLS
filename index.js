@@ -69,16 +69,28 @@ export default {
     if (message?.contact?.phone_number) {
       await callTelegram(token, "sendMessage", {
         chat_id: chatId,
-        text: `Телефон получен: ${message.contact.phone_number}. Теперь отправьте ваше имя.`
+        text: `Телефон получен: ${message.contact.phone_number}. Теперь отправьте ваше имя ответом на это сообщение.`,
+        reply_markup: {
+          force_reply: true,
+          selective: true
+        }
       });
       return new Response("OK");
     }
 
     if (message?.text) {
       const text = message.text.trim();
+      const isNameReply =
+        Boolean(message.reply_to_message?.text) &&
+        message.reply_to_message.text.includes("Теперь отправьте ваше имя");
 
       if (text === "/start") {
         await sendVerificationButton(token, chatId, "Привет! Для теста нажмите кнопку «Верификация». ");
+        return new Response("OK");
+      }
+
+      if (!isNameReply) {
+        await sendVerificationButton(token, chatId, "Для начала верификации нажмите кнопку ниже.");
         return new Response("OK");
       }
 
