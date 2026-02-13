@@ -1,4 +1,113 @@
 const TELEGRAM_API = "https://api.telegram.org";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+const DEFAULT_SHEET_ID = "1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ";
+const DEFAULT_SHEET_RANGE = "'Set'!A:F";
+
+function toBase64Url(input) {
+  return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function arrayBufferToBase64Url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return toBase64Url(binary);
+}
+
+function parsePhoneFromReplyText(replyText = "") {
+  const match = replyText.match(/Телефон получен:\s*([^\.]+)/);
+  return match ? match[1].trim() : "";
+}
+
+async function importServiceAccountKey(privateKeyPem) {
+  const sanitizedPem = privateKeyPem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s+/g, "");
+  const binaryDer = Uint8Array.from(atob(sanitizedPem), (char) => char.charCodeAt(0)).buffer;
+
+  return crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer,
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: "SHA-256"
+    },
+    false,
+    ["sign"]
+  );
+}
+
+async function getGoogleAccessToken(env) {
+  if (!env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !env.GOOGLE_PRIVATE_KEY) {
+    throw new Error("Google service account credentials are not configured");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = toBase64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = toBase64Url(
+    JSON.stringify({
+      iss: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      scope: "https://www.googleapis.com/auth/spreadsheets",
+      aud: GOOGLE_TOKEN_URL,
+      iat: now,
+      exp: now + 3600
+    })
+  );
+
+  const unsignedJwt = `${header}.${payload}`;
+  const signingKey = await importServiceAccountKey(env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"));
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    signingKey,
+    new TextEncoder().encode(unsignedJwt)
+  );
+
+  const assertion = `${unsignedJwt}.${arrayBufferToBase64Url(signature)}`;
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion
+    }).toString()
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Failed to get Google access token: ${response.status} ${details}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
+async function appendVerificationToSheet(env, rowValues) {
+  const token = await getGoogleAccessToken(env);
+  const spreadsheetId = env.GOOGLE_SHEET_ID || DEFAULT_SHEET_ID;
+  const range = env.GOOGLE_SHEET_RANGE || DEFAULT_SHEET_RANGE;
+  const endpoint = `${GOOGLE_SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      majorDimension: "ROWS",
+      values: [rowValues]
+    })
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Failed to append data to Google Sheet: ${response.status} ${details}`);
+  }
+}
 
 async function callTelegram(token, method, payload) {
   return fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
@@ -101,6 +210,23 @@ export default {
           remove_keyboard: true
         }
       });
+
+      const phone = parsePhoneFromReplyText(message.reply_to_message?.text || "");
+      const row = [
+        new Date().toISOString(),
+        String(chatId),
+        message.from?.username ? `@${message.from.username}` : "",
+        message.from?.id ? String(message.from.id) : "",
+        phone,
+        text
+      ];
+
+      try {
+        await appendVerificationToSheet(env, row);
+      } catch (error) {
+        console.error("Google Sheets append failed", error);
+      }
+
       return new Response("OK");
     }
 
