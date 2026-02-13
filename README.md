@@ -19,6 +19,29 @@
 - `GOOGLE_SHEET_RANGE` — диапазон для записи (по умолчанию `'Set'!A:F`).
 - `GOOGLE_APPS_SCRIPT_URL` — (опционально) URL Web App из Google Apps Script для прямой записи без service account.
 
+### Быстрая настройка, если видите ошибку про `GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY`
+
+Есть два рабочих пути:
+
+1. **Через service account** (Google Cloud):
+
+```bash
+wrangler secret put GOOGLE_SERVICE_ACCOUNT_EMAIL
+wrangler secret put GOOGLE_PRIVATE_KEY
+```
+
+> Для `GOOGLE_PRIVATE_KEY` вставляйте ключ целиком, включая строки
+> `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----`.
+
+2. **Через Apps Script** (без service account):
+
+```bash
+wrangler secret put GOOGLE_APPS_SCRIPT_URL
+```
+
+Если `GOOGLE_APPS_SCRIPT_URL` задан, бот пишет в таблицу через Web App и не требует
+`GOOGLE_SERVICE_ACCOUNT_EMAIL` / `GOOGLE_PRIVATE_KEY`.
+
 
 ## Альтернатива service account: запись через Google Apps Script
 Если не хотите настраивать `GOOGLE_SERVICE_ACCOUNT_EMAIL` и `GOOGLE_PRIVATE_KEY`, можно писать в таблицу через Web App:
