@@ -44,6 +44,10 @@ function formatGoogleSheetsError(error) {
     return "Не найдены таблица/лист (проверьте GOOGLE_SHEET_ID и GOOGLE_SHEET_RANGE).";
   }
 
+  if (message.includes("credentials are not configured")) {
+    return "Не настроены GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY. Либо задайте их, либо используйте GOOGLE_APPS_SCRIPT_URL для прямой записи через Apps Script.";
+  }
+
   return `Не удалось записать в Google Таблицу: ${message}`;
 }
 
@@ -109,6 +113,21 @@ async function getGoogleAccessToken(env) {
 }
 
 async function appendVerificationToSheet(env, rowValues) {
+  if (env.GOOGLE_APPS_SCRIPT_URL) {
+    const response = await fetch(env.GOOGLE_APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values: rowValues })
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`Failed to append data via Apps Script: ${response.status} ${details}`);
+    }
+
+    return;
+  }
+
   const token = await getGoogleAccessToken(env);
   const spreadsheetId = env.GOOGLE_SHEET_ID || DEFAULT_SHEET_ID;
   const range = env.GOOGLE_SHEET_RANGE || DEFAULT_SHEET_RANGE;
