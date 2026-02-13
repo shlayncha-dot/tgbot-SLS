@@ -3,6 +3,7 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 const DEFAULT_SHEET_ID = "1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ";
 const DEFAULT_SHEET_RANGE = "'Set'!A:F";
+const BUILD_COUNTER = 2;
 
 function toBase64Url(input) {
   return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -22,6 +23,28 @@ function arrayBufferToBase64Url(buffer) {
 function parsePhoneFromReplyText(replyText = "") {
   const match = replyText.match(/Телефон получен:\s*([^\.]+)/);
   return match ? match[1].trim() : "";
+}
+
+function buildVerificationButtonText() {
+  return `Верификация ${BUILD_COUNTER}`;
+}
+
+function formatGoogleSheetsError(error) {
+  const message = String(error?.message || error || "Unknown error");
+
+  if (message.includes("401") || message.includes("invalid_grant") || message.includes("invalid_client")) {
+    return "Ошибка авторизации сервисного аккаунта (проверьте GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY).";
+  }
+
+  if (message.includes("403") || message.includes("permission")) {
+    return "Нет доступа к Google Таблице (нужно выдать сервисному аккаунту доступ через Share).";
+  }
+
+  if (message.includes("404")) {
+    return "Не найдены таблица/лист (проверьте GOOGLE_SHEET_ID и GOOGLE_SHEET_RANGE).";
+  }
+
+  return `Не удалось записать в Google Таблицу: ${message}`;
 }
 
 async function importServiceAccountKey(privateKeyPem) {
@@ -122,7 +145,7 @@ async function sendVerificationButton(token, chatId, text = "Нажмите кн
     chat_id: chatId,
     text,
     reply_markup: {
-      inline_keyboard: [[{ text: "Верификация", callback_data: "verification_start" }]]
+      inline_keyboard: [[{ text: buildVerificationButtonText(), callback_data: "verification_start" }]]
     }
   });
 }
@@ -130,7 +153,7 @@ async function sendVerificationButton(token, chatId, text = "Нажмите кн
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
-      return new Response("Bot is running");
+      return new Response(`Bot is running. Build ${BUILD_COUNTER}`);
     }
 
     const token = env.TELEGRAM_TOKEN;
@@ -198,12 +221,12 @@ export default {
         message.reply_to_message.text.includes("Теперь отправьте ваше имя");
 
       if (text === "/start") {
-        await sendVerificationButton(token, chatId, "Привет! Для теста нажмите кнопку «Верификация». ");
+        await sendVerificationButton(token, chatId, `Привет${BUILD_COUNTER}! Для теста нажмите кнопку «Верификация».`);
         return new Response("OK");
       }
 
       if (!isNameReply) {
-        await sendVerificationButton(token, chatId, "Для начала верификации нажмите кнопку ниже.");
+        await sendVerificationButton(token, chatId, `Для начала верификации нажмите кнопку ниже. Build ${BUILD_COUNTER}.`);
         return new Response("OK");
       }
 
@@ -228,7 +251,12 @@ export default {
       try {
         await appendVerificationToSheet(env, row);
       } catch (error) {
+        const diagnostic = formatGoogleSheetsError(error);
         console.error("Google Sheets append failed", error);
+        await callTelegram(token, "sendMessage", {
+          chat_id: chatId,
+          text: `⚠️ ${diagnostic}`
+        });
       }
 
       return new Response("OK");
