@@ -317,7 +317,7 @@ export default {
         message.reply_to_message.text.includes("Теперь отправьте ваше имя");
 
       if (text === "/start") {
-        await sendVerificationButton(token, chatId, `Привет${BUILD_COUNTER}! Для теста нажмите кнопку «Верификация».`);
+        await sendVerificationButton(token, chatId, `Привет! Для теста нажмите кнопку «Верификация». Build ${BUILD_COUNTER}.`);
         return new Response("OK");
       }
 
