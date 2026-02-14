@@ -1,1 +1,2 @@
-TELEGRAM_TOKEN=replace_me
+TELEGRAM_TOKEN=your_telegram_bot_token
+GOOGLE_APPS_SCRIPT_URL=https://script.google.com/macros/s/your_deployment_id/exec
