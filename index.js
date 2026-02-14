@@ -1,5 +1,5 @@
 const TELEGRAM_API = "https://api.telegram.org";
-const BUILD_COUNTER = 3;
+const BUILD_COUNTER = 4;
 
 function getAppsScriptUrl(env) {
   return env.GOOGLE_APPS_SCRIPT_URL || env.GOOGLE_SCRIPT_URL || env.APPS_SCRIPT_URL || "";
@@ -55,6 +55,17 @@ async function callTelegram(token, method, payload) {
   });
 }
 
+async function callTelegramJson(token, method, payload = {}) {
+  const response = await callTelegram(token, method, payload);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || data?.ok === false) {
+    throw new Error(`Telegram API ${method} failed: ${response.status} ${JSON.stringify(data)}`);
+  }
+
+  return data;
+}
+
 async function sendVerificationButton(token, chatId, text = "Нажмите кнопку ниже для начала верификации") {
   return callTelegram(token, "sendMessage", {
     chat_id: chatId,
@@ -68,16 +79,64 @@ async function sendVerificationButton(token, chatId, text = "Нажмите кн
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
+      const url = new URL(request.url);
+      const action = url.searchParams.get("action");
+      const token = env.TELEGRAM_TOKEN;
+      const webhookUrl = env.WEBHOOK_URL || "";
+
+      if (action === "webhook-info") {
+        if (!token) {
+          return new Response("TELEGRAM_TOKEN is not configured", { status: 500 });
+        }
+
+        try {
+          const webhookInfo = await callTelegramJson(token, "getWebhookInfo");
+          return new Response(JSON.stringify(webhookInfo, null, 2), {
+            headers: { "Content-Type": "application/json; charset=utf-8" }
+          });
+        } catch (error) {
+          return new Response(String(error?.message || error), { status: 500 });
+        }
+      }
+
+      if (action === "set-webhook") {
+        if (!token) {
+          return new Response("TELEGRAM_TOKEN is not configured", { status: 500 });
+        }
+
+        if (!webhookUrl) {
+          return new Response("WEBHOOK_URL is not configured", { status: 500 });
+        }
+
+        try {
+          const setWebhookResult = await callTelegramJson(token, "setWebhook", {
+            url: webhookUrl,
+            drop_pending_updates: true
+          });
+
+          return new Response(JSON.stringify(setWebhookResult, null, 2), {
+            headers: { "Content-Type": "application/json; charset=utf-8" }
+          });
+        } catch (error) {
+          return new Response(String(error?.message || error), { status: 500 });
+        }
+      }
+
       const configInfo = {
         status: "ok",
         build: BUILD_COUNTER,
         configured: {
           telegramToken: Boolean(env.TELEGRAM_TOKEN),
-          appsScriptUrl: Boolean(getAppsScriptUrl(env))
+          appsScriptUrl: Boolean(getAppsScriptUrl(env)),
+          webhookUrl: Boolean(webhookUrl)
         },
         notes: {
           setupMode: "Only Apps Script mode is supported",
-          requiredSecrets: ["TELEGRAM_TOKEN", "GOOGLE_APPS_SCRIPT_URL"]
+          requiredSecrets: ["TELEGRAM_TOKEN", "GOOGLE_APPS_SCRIPT_URL"],
+          diagnostics: {
+            webhookInfo: "GET /?action=webhook-info",
+            setWebhook: "GET /?action=set-webhook (requires WEBHOOK_URL secret)"
+          }
         }
       };
 
