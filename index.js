@@ -75,6 +75,35 @@ async function callTelegramJson(token, method, payload = {}) {
   return data;
 }
 
+async function getTelegramDiagnostics(token, expectedWebhookUrl) {
+  const [me, webhookInfo] = await Promise.all([
+    callTelegramJson(token, "getMe"),
+    callTelegramJson(token, "getWebhookInfo")
+  ]);
+
+  const currentWebhookUrl = webhookInfo?.result?.url || "";
+
+  return {
+    bot: {
+      id: me?.result?.id,
+      username: me?.result?.username,
+      can_join_groups: me?.result?.can_join_groups,
+      supports_inline_queries: me?.result?.supports_inline_queries
+    },
+    webhook: {
+      current: currentWebhookUrl,
+      expected: expectedWebhookUrl,
+      matchesExpected: Boolean(expectedWebhookUrl) && currentWebhookUrl === expectedWebhookUrl,
+      pendingUpdates: webhookInfo?.result?.pending_update_count || 0,
+      lastErrorDate: webhookInfo?.result?.last_error_date || null,
+      lastErrorMessage: webhookInfo?.result?.last_error_message || null,
+      maxConnections: webhookInfo?.result?.max_connections || null,
+      hasCustomCertificate: Boolean(webhookInfo?.result?.has_custom_certificate),
+      ipAddress: webhookInfo?.result?.ip_address || null
+    }
+  };
+}
+
 async function sendVerificationButton(token, chatId, text = "Нажмите кнопку ниже для начала верификации") {
   return callTelegram(token, "sendMessage", {
     chat_id: chatId,
@@ -135,6 +164,21 @@ export default {
         }
       }
 
+      if (action === "diagnostics") {
+        if (!token) {
+          return new Response("TELEGRAM_TOKEN is not configured", { status: 500 });
+        }
+
+        try {
+          const diagnostics = await getTelegramDiagnostics(token, webhookUrl);
+          return new Response(JSON.stringify(diagnostics, null, 2), {
+            headers: { "Content-Type": "application/json; charset=utf-8" }
+          });
+        } catch (error) {
+          return new Response(String(error?.message || error), { status: 500 });
+        }
+      }
+
       const configInfo = {
         status: "ok",
         build: BUILD_COUNTER,
@@ -148,6 +192,7 @@ export default {
           requiredSecrets: ["TELEGRAM_TOKEN", "GOOGLE_APPS_SCRIPT_URL"],
           diagnostics: {
             webhookInfo: "GET /?action=webhook-info",
+            fullDiagnostics: "GET /?action=diagnostics",
             setWebhook: "GET /?action=set-webhook (uses WEBHOOK_URL or current worker URL)",
             webhookUrlHint: "WEBHOOK_URL must be your Worker URL, not script.google.com/macros"
           }
