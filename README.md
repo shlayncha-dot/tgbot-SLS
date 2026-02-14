@@ -18,6 +18,8 @@
 - `GOOGLE_PRIVATE_KEY` — приватный ключ сервисного аккаунта (PEM).
 - `GOOGLE_SHEET_ID` — id таблицы (по умолчанию уже установлен `1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ`).
 - `GOOGLE_SHEET_RANGE` — диапазон для записи (по умолчанию `'Set'!A:F`).
+- `GOOGLE_SHEET_GID` — (опционально) `gid` вкладки из ссылки Google Sheets. Если задан, бот сам найдёт имя листа и запишет в диапазон `A:F` этой вкладки.
+- `GOOGLE_SHEET_URL` — (опционально) полная ссылка на таблицу (`https://docs.google.com/spreadsheets/d/.../edit?gid=...`). Из неё бот сможет взять и `GOOGLE_SHEET_ID`, и `GOOGLE_SHEET_GID`.
 - `GOOGLE_APPS_SCRIPT_URL` — (опционально) URL Web App из Google Apps Script для прямой записи без service account.
 - `GOOGLE_SCRIPT_URL` / `APPS_SCRIPT_URL` — дополнительные алиасы для того же URL (если так удобнее в текущем окружении).
 
@@ -130,6 +132,35 @@ function doPost(e) {
 ```bash
 wrangler secret put TELEGRAM_TOKEN
 ```
+
+### Где именно вставлять значения в Cloudflare UI
+1. Откройте **Workers & Pages → ваш Worker → Settings → Variables and Secrets**.
+2. Нажмите **Add**.
+3. Для токена Telegram:
+   - Type: **Secret** (лучше, чем Plaintext)
+   - Name: `TELEGRAM_TOKEN`
+   - Value: токен из BotFather.
+4. Для таблицы Google (если через service account):
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+   - `GOOGLE_PRIVATE_KEY`
+   - (опционально) `GOOGLE_SHEET_URL` = `https://docs.google.com/spreadsheets/d/1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ/edit?gid=1596350298#gid=1596350298`
+     - либо вместо URL вручную: `GOOGLE_SHEET_ID=1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ` и `GOOGLE_SHEET_GID=1596350298`.
+5. После изменения переменных обязательно нажмите **Deploy** в Cloudflare UI.
+
+### Почему `https://oauth2.googleapis.com/token` «не открывается» в браузере
+Это нормально: ссылка не предназначена для ручного открытия в браузере.
+Она принимает только `POST` запрос с JWT от сервисного аккаунта и возвращает `access_token` для Google API.
+
+Бот использует этот URL только программно при записи через Google Sheets API.
+
+### Быстрая проверка, какие переменные реально видит Worker
+Сделайте `GET` запрос на URL вашего Worker (без Telegram webhook payload), например:
+
+```bash
+curl https://tgbotsls.a-shev.workers.dev
+```
+
+Worker вернёт JSON с флагами `true/false` по ключевым переменным (`telegramToken`, `sheetId`, `sheetGid` и т.д.), чтобы быстро понять, «долетели» ли настройки.
 
 Проверка, что секрет действительно привязан к нужному сервису/окружению:
 

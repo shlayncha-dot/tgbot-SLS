@@ -33,6 +33,24 @@ function buildVerificationButtonText() {
   return `Верификация ${BUILD_COUNTER}`;
 }
 
+function parseSheetUrl(url) {
+  if (!url) {
+    return { spreadsheetId: "", gid: "" };
+  }
+
+  const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = url.match(/[?#&]gid=(\d+)/);
+
+  return {
+    spreadsheetId: idMatch?.[1] || "",
+    gid: gidMatch?.[1] || ""
+  };
+}
+
+function escapeSheetTitle(sheetTitle) {
+  return sheetTitle.replace(/'/g, "''");
+}
+
 function formatGoogleSheetsError(error) {
   const message = String(error?.message || error || "Unknown error");
 
@@ -135,8 +153,7 @@ async function appendVerificationToSheet(env, rowValues) {
   }
 
   const token = await getGoogleAccessToken(env);
-  const spreadsheetId = env.GOOGLE_SHEET_ID || DEFAULT_SHEET_ID;
-  const range = env.GOOGLE_SHEET_RANGE || DEFAULT_SHEET_RANGE;
+  const { spreadsheetId, range } = await resolveSheetTarget(env, token);
   const endpoint = `${GOOGLE_SHEETS_API}/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
 
   const response = await fetch(endpoint, {
@@ -155,6 +172,43 @@ async function appendVerificationToSheet(env, rowValues) {
     const details = await response.text();
     throw new Error(`Failed to append data to Google Sheet: ${response.status} ${details}`);
   }
+}
+
+async function resolveSheetTarget(env, accessToken) {
+  const parsedFromUrl = parseSheetUrl(env.GOOGLE_SHEET_URL || "");
+  const spreadsheetId = env.GOOGLE_SHEET_ID || parsedFromUrl.spreadsheetId || DEFAULT_SHEET_ID;
+
+  if (env.GOOGLE_SHEET_RANGE) {
+    return { spreadsheetId, range: env.GOOGLE_SHEET_RANGE };
+  }
+
+  const gid = env.GOOGLE_SHEET_GID || parsedFromUrl.gid;
+
+  if (!gid) {
+    return { spreadsheetId, range: DEFAULT_SHEET_RANGE };
+  }
+
+  const metadataResponse = await fetch(
+    `${GOOGLE_SHEETS_API}/${spreadsheetId}?fields=sheets(properties(sheetId,title))`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }
+  );
+
+  if (!metadataResponse.ok) {
+    const details = await metadataResponse.text();
+    throw new Error(`Failed to resolve GOOGLE_SHEET_GID: ${metadataResponse.status} ${details}`);
+  }
+
+  const metadata = await metadataResponse.json();
+  const targetSheet = metadata?.sheets?.find((sheet) => String(sheet?.properties?.sheetId) === String(gid));
+
+  if (!targetSheet?.properties?.title) {
+    throw new Error(`GOOGLE_SHEET_GID=${gid} does not exist in spreadsheet ${spreadsheetId}`);
+  }
+
+  const range = `'${escapeSheetTitle(targetSheet.properties.title)}'!A:F`;
+  return { spreadsheetId, range };
 }
 
 async function callTelegram(token, method, payload) {
@@ -178,7 +232,24 @@ async function sendVerificationButton(token, chatId, text = "Нажмите кн
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
-      return new Response(`Bot is running. Build ${BUILD_COUNTER}`);
+      const parsedSheetUrl = parseSheetUrl(env.GOOGLE_SHEET_URL || "");
+      const configInfo = {
+        status: "ok",
+        build: BUILD_COUNTER,
+        configured: {
+          telegramToken: Boolean(env.TELEGRAM_TOKEN),
+          appsScriptUrl: Boolean(getAppsScriptUrl(env)),
+          serviceAccountEmail: Boolean(env.GOOGLE_SERVICE_ACCOUNT_EMAIL),
+          privateKey: Boolean(env.GOOGLE_PRIVATE_KEY),
+          sheetId: env.GOOGLE_SHEET_ID || parsedSheetUrl.spreadsheetId || DEFAULT_SHEET_ID,
+          sheetRange: env.GOOGLE_SHEET_RANGE || DEFAULT_SHEET_RANGE,
+          sheetGid: env.GOOGLE_SHEET_GID || parsedSheetUrl.gid || null
+        }
+      };
+
+      return new Response(JSON.stringify(configInfo, null, 2), {
+        headers: { "Content-Type": "application/json; charset=utf-8" }
+      });
     }
 
     const token = env.TELEGRAM_TOKEN;
