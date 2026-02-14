@@ -24,6 +24,39 @@
 > `GOOGLE_SERVICE_ACCOUNT_EMAIL` и `GOOGLE_PRIVATE_KEY` нужны **только** если вы пишете напрямую в Google Sheets API.
 > Если используете Apps Script URL (`GOOGLE_APPS_SCRIPT_URL` или алиасы), эти две переменные можно не задавать.
 
+## Настройка варианта `GOOGLE_SERVICE_ACCOUNT_EMAIL + GOOGLE_PRIVATE_KEY` (без Apps Script)
+
+Этот путь не требует кода в Google Таблице: бот пишет в Sheets API напрямую.
+
+1. Откройте Google Cloud Console → **IAM & Admin → Service Accounts**.
+2. Создайте сервисный аккаунт (или используйте существующий).
+3. Внутри сервисного аккаунта создайте JSON-ключ: **Keys → Add key → Create new key → JSON**.
+4. Откройте JSON-файл и возьмите значения:
+   - `client_email` → это `GOOGLE_SERVICE_ACCOUNT_EMAIL`.
+   - `private_key` → это `GOOGLE_PRIVATE_KEY` (целиком, с `BEGIN/END PRIVATE KEY`).
+5. В Google Sheets откройте нужную таблицу и нажмите **Share**.
+6. Добавьте `client_email` сервисного аккаунта в доступ таблицы как **Editor**.
+7. В Cloudflare Worker задайте секреты:
+
+```bash
+wrangler secret put GOOGLE_SERVICE_ACCOUNT_EMAIL
+wrangler secret put GOOGLE_PRIVATE_KEY
+```
+
+8. (Опционально) задайте таблицу/диапазон, если они отличаются от дефолта:
+
+```bash
+wrangler secret put GOOGLE_SHEET_ID
+wrangler secret put GOOGLE_SHEET_RANGE
+```
+
+9. Проверьте, что Apps Script URL переменные не заданы, если хотите именно этот путь:
+   - `GOOGLE_APPS_SCRIPT_URL`
+   - `GOOGLE_SCRIPT_URL`
+   - `APPS_SCRIPT_URL`
+
+Если хотя бы одна из них задана, бот пойдёт через Apps Script.
+
 ### Быстрая настройка, если видите ошибку про `GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY`
 
 Есть два рабочих пути:
@@ -54,7 +87,7 @@ wrangler secret put GOOGLE_APPS_SCRIPT_URL
 Если не хотите настраивать `GOOGLE_SERVICE_ACCOUNT_EMAIL` и `GOOGLE_PRIVATE_KEY`, можно писать в таблицу через Web App:
 
 1. В Google Sheets откройте **Extensions → Apps Script**.
-2. Вставьте скрипт:
+2. Вставьте код из файла [`apps-script/doPost.gs`](apps-script/doPost.gs).
 
 ```javascript
 function doPost(e) {
