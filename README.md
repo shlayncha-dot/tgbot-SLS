@@ -14,10 +14,15 @@
 ## Переменные окружения
 - `TELEGRAM_TOKEN` — токен вашего Telegram-бота.
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` — email сервисного аккаунта Google Cloud (например, `bot-writer@project.iam.gserviceaccount.com`).
+> Какую почту указывать: значение поля `client_email` из JSON-ключа сервисного аккаунта (обычно выглядит как `name@project-id.iam.gserviceaccount.com`).
 - `GOOGLE_PRIVATE_KEY` — приватный ключ сервисного аккаунта (PEM).
 - `GOOGLE_SHEET_ID` — id таблицы (по умолчанию уже установлен `1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ`).
 - `GOOGLE_SHEET_RANGE` — диапазон для записи (по умолчанию `'Set'!A:F`).
 - `GOOGLE_APPS_SCRIPT_URL` — (опционально) URL Web App из Google Apps Script для прямой записи без service account.
+- `GOOGLE_SCRIPT_URL` / `APPS_SCRIPT_URL` — дополнительные алиасы для того же URL (если так удобнее в текущем окружении).
+
+> `GOOGLE_SERVICE_ACCOUNT_EMAIL` и `GOOGLE_PRIVATE_KEY` нужны **только** если вы пишете напрямую в Google Sheets API.
+> Если используете Apps Script URL (`GOOGLE_APPS_SCRIPT_URL` или алиасы), эти две переменные можно не задавать.
 
 ### Быстрая настройка, если видите ошибку про `GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY`
 
@@ -37,9 +42,11 @@ wrangler secret put GOOGLE_PRIVATE_KEY
 
 ```bash
 wrangler secret put GOOGLE_APPS_SCRIPT_URL
+# либо можно задать алиас:
+# wrangler secret put GOOGLE_SCRIPT_URL
 ```
 
-Если `GOOGLE_APPS_SCRIPT_URL` задан, бот пишет в таблицу через Web App и не требует
+Если задан любой из URL (`GOOGLE_APPS_SCRIPT_URL`, `GOOGLE_SCRIPT_URL`, `APPS_SCRIPT_URL`), бот пишет в таблицу через Web App и не требует
 `GOOGLE_SERVICE_ACCOUNT_EMAIL` / `GOOGLE_PRIVATE_KEY`.
 
 
@@ -65,9 +72,15 @@ function doPost(e) {
 
 3. Нажмите **Deploy → New deployment → Web app**.
 4. `Execute as`: **Me**, `Who has access`: **Anyone** (или ограничьте по необходимости).
-5. Скопируйте URL и сохраните как секрет/переменную `GOOGLE_APPS_SCRIPT_URL` в Cloudflare Worker.
+5. Скопируйте URL и сохраните как секрет/переменную `GOOGLE_APPS_SCRIPT_URL` (или `GOOGLE_SCRIPT_URL` / `APPS_SCRIPT_URL`) в Cloudflare Worker.
 
-Когда `GOOGLE_APPS_SCRIPT_URL` задан, бот сначала пишет через Apps Script и не требует service account переменных.
+Когда задан любой из URL переменных (`GOOGLE_APPS_SCRIPT_URL`, `GOOGLE_SCRIPT_URL`, `APPS_SCRIPT_URL`), бот сначала пишет через Apps Script и не требует service account переменных.
+
+
+> **Нужно ли писать скрипт в таблице?**
+> - **Да, нужно**, если используете путь через `GOOGLE_APPS_SCRIPT_URL` / `GOOGLE_SCRIPT_URL` / `APPS_SCRIPT_URL`.
+>   Тогда обязательно создаётся Apps Script (функция `doPost`) и публикуется как Web App.
+> - **Нет, не нужно**, если используете `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_PRIVATE_KEY` (прямая запись в Google Sheets API).
 
 ## Почему `TELEGRAM_TOKEN` «слетает» в Cloudflare (Variables and Secrets)
 Чаще всего это не удаление секрета, а одна из типовых причин:

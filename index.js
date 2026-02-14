@@ -5,6 +5,10 @@ const DEFAULT_SHEET_ID = "1reypZsOCUz8nlsvi46B_jbbd9QXjTKRCnChK-jfYBmQ";
 const DEFAULT_SHEET_RANGE = "'Set'!A:F";
 const BUILD_COUNTER = 2;
 
+function getAppsScriptUrl(env) {
+  return env.GOOGLE_APPS_SCRIPT_URL || env.GOOGLE_SCRIPT_URL || env.APPS_SCRIPT_URL || "";
+}
+
 function toBase64Url(input) {
   return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
@@ -45,7 +49,7 @@ function formatGoogleSheetsError(error) {
   }
 
   if (message.includes("credentials are not configured")) {
-    return "Не настроены GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY. Либо задайте их, либо используйте GOOGLE_APPS_SCRIPT_URL для прямой записи через Apps Script.";
+    return "Не настроены GOOGLE_SERVICE_ACCOUNT_EMAIL / GOOGLE_PRIVATE_KEY. Либо задайте их, либо используйте GOOGLE_APPS_SCRIPT_URL (или GOOGLE_SCRIPT_URL / APPS_SCRIPT_URL) для прямой записи через Apps Script.";
   }
 
   return `Не удалось записать в Google Таблицу: ${message}`;
@@ -113,8 +117,10 @@ async function getGoogleAccessToken(env) {
 }
 
 async function appendVerificationToSheet(env, rowValues) {
-  if (env.GOOGLE_APPS_SCRIPT_URL) {
-    const response = await fetch(env.GOOGLE_APPS_SCRIPT_URL, {
+  const appsScriptUrl = getAppsScriptUrl(env);
+
+  if (appsScriptUrl) {
+    const response = await fetch(appsScriptUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ values: rowValues })
