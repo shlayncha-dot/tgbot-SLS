@@ -1,8 +1,17 @@
 const TELEGRAM_API = "https://api.telegram.org";
-const BUILD_COUNTER = 4;
+const BUILD_COUNTER = 5;
 
 function getAppsScriptUrl(env) {
   return env.GOOGLE_APPS_SCRIPT_URL || env.GOOGLE_SCRIPT_URL || env.APPS_SCRIPT_URL || "";
+}
+
+
+function buildWebhookCandidate(request, env) {
+  return (env.WEBHOOK_URL || `${new URL(request.url).origin}/`).trim();
+}
+
+function isAppsScriptWebhook(url) {
+  return /script\.google\.com\/macros\//.test(url);
 }
 
 function parsePhoneFromReplyText(replyText = "") {
@@ -82,7 +91,7 @@ export default {
       const url = new URL(request.url);
       const action = url.searchParams.get("action");
       const token = env.TELEGRAM_TOKEN;
-      const webhookUrl = env.WEBHOOK_URL || "";
+      const webhookUrl = buildWebhookCandidate(request, env);
 
       if (action === "webhook-info") {
         if (!token) {
@@ -106,6 +115,10 @@ export default {
 
         if (!webhookUrl) {
           return new Response("WEBHOOK_URL is not configured", { status: 500 });
+        }
+
+        if (isAppsScriptWebhook(webhookUrl)) {
+          return new Response("WEBHOOK_URL points to Google Apps Script. Use your Cloudflare Worker URL instead.", { status: 400 });
         }
 
         try {
@@ -135,7 +148,8 @@ export default {
           requiredSecrets: ["TELEGRAM_TOKEN", "GOOGLE_APPS_SCRIPT_URL"],
           diagnostics: {
             webhookInfo: "GET /?action=webhook-info",
-            setWebhook: "GET /?action=set-webhook (requires WEBHOOK_URL secret)"
+            setWebhook: "GET /?action=set-webhook (uses WEBHOOK_URL or current worker URL)",
+            webhookUrlHint: "WEBHOOK_URL must be your Worker URL, not script.google.com/macros"
           }
         }
       };
