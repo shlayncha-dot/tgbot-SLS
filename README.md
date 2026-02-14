@@ -2,6 +2,53 @@
 
 Минимальный Telegram webhook-бот на Cloudflare Workers.
 
+## FAQ: `wrangler.toml`, Google Cloud и полностью бесплатный вариант
+
+### 1) Нет файла `wrangler.toml` — создавать вручную?
+Да. Если файла нет в вашем локальном проекте, создайте его руками в корне репозитория.
+
+Минимальный рабочий вариант:
+
+```toml
+name = "tgbotsls"
+main = "index.js"
+compatibility_date = "2024-06-01"
+```
+
+> В Cloudflare Dashboard (онлайн-редакторе) этот файл обычно не показывается как отдельный файл. Это нормально: `wrangler.toml` нужен в первую очередь для локальной работы через Wrangler CLI.
+
+### 2) Google Cloud платный — как сделать бесплатно?
+Для этого бота можно обойтись без Google Cloud service account:
+
+- оставить Worker на бесплатном плане Cloudflare;
+- использовать Google Sheets + Google Apps Script Web App для записи в таблицу.
+
+В этом режиме не нужны `GOOGLE_SERVICE_ACCOUNT_EMAIL` и `GOOGLE_PRIVATE_KEY`, достаточно `GOOGLE_APPS_SCRIPT_URL` (или алиасов `GOOGLE_SCRIPT_URL` / `APPS_SCRIPT_URL`).
+
+### 3) Можно ли через Google Apps Script?
+Да, и это как раз основной полностью бесплатный путь для небольших/средних нагрузок.
+
+1. Создайте Apps Script в таблице и опубликуйте как Web App.
+2. Добавьте URL как секрет в Worker:
+
+```bash
+wrangler secret put GOOGLE_APPS_SCRIPT_URL
+```
+
+3. Задайте Telegram токен:
+
+```bash
+wrangler secret put TELEGRAM_TOKEN
+```
+
+4. Деплой:
+
+```bash
+wrangler deploy
+```
+
+> Важно: у Apps Script есть квоты (лимиты). Для обычного личного бота обычно хватает, но это не безлимит.
+
 ## Что умеет
 - Показывает кнопку **«Верификация»**.
 - После нажатия просит подтверждение (**«Подтверждаю»**).
